@@ -1,0 +1,111 @@
+<script>
+/* GoHighLevel Funnel Ecommerce listener by MD Niamul - mdniamul.com
+   Free GA4 ecommerce events for a GHL funnel: view_item on the sales page,
+   begin_checkout on the order page and purchase on the thank-you page.
+   Edit FUNNEL below to match your own funnel step paths. */
+(function () {
+  var FUNNEL = {
+    currency: 'USD',                  // used when the page shows only "$"
+    salesPages: ['/sales'],           // view_item
+    checkoutPages: ['/order'],        // begin_checkout
+    thankYouPages: ['/thank-you']     // purchase
+  };
+
+  window.dataLayer = window.dataLayer || [];
+  var path = window.location.pathname.replace(/\/+$/, '') || '/';
+
+  function onPage(list) {
+    for (var i = 0; i < list.length; i++) {
+      var p = (list[i] || '').replace(/\/+$/, '') || '/';
+      if (p === '/' ? path === '/' : (path === p || path.indexOf(p + '/') === 0)) return true;
+    }
+    return false;
+  }
+
+  // Reads the price shown on the page, near "Total" first
+  function readPrice(hints) {
+    var text = (document.body && document.body.innerText) || '';
+    var re = /(US\$|AU\$|CA\$|NZ\$|\$|£|€|USD|AUD|CAD|GBP|EUR)\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i;
+    var map = { 'US$': 'USD', 'AU$': 'AUD', 'CA$': 'CAD', 'NZ$': 'NZD', '£': 'GBP', '€': 'EUR' };
+    function parse(s) {
+      var m = s.match(re);
+      if (!m) return null;
+      var sym = m[1].toUpperCase();
+      return { value: parseFloat(m[2].replace(/,/g, '')), currency: map[sym] || (sym === '$' ? FUNNEL.currency : sym) };
+    }
+    // Use the price closest to a hint word (e.g. "Just $27 Today" wins over "Was $97")
+    var low = text.toLowerCase();
+    var reAll = new RegExp(re.source, 'gi');
+    for (var i = 0; i < (hints || []).length; i++) {
+      var idx = low.indexOf(hints[i].toLowerCase());
+      if (idx === -1) continue;
+      var from = Math.max(0, idx - 40);
+      var win = text.substring(from, idx + hints[i].length + 60);
+      var best = null, bestDist = 1e9, m;
+      reAll.lastIndex = 0;
+      while ((m = reAll.exec(win))) {
+        var pos = from + m.index;
+        var dist = pos < idx ? idx - (pos + m[0].length) : pos - (idx + hints[i].length);
+        if (dist < bestDist) { bestDist = dist; best = m[0]; }
+      }
+      if (best) { var f = parse(best); if (f) return f; }
+    }
+    return parse(text) || { value: 0, currency: FUNNEL.currency };
+  }
+
+  function item(price) {
+    var id = path.replace(/^\/+/, '').toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'home';
+    return { item_id: id, item_name: document.title || id, price: price, quantity: 1 };
+  }
+
+  function push(eventName, value, currency, extra, items) {
+    var ecommerce = { currency: currency, value: value, items: items || [item(value)] };
+    for (var k in (extra || {})) ecommerce[k] = extra[k];
+    window.dataLayer.push({ ecommerce: null }); // clear the last ecommerce object
+    window.dataLayer.push({ event: eventName, ecommerce: ecommerce, page_path: window.location.pathname });
+  }
+
+  function run() {
+    if (onPage(FUNNEL.salesPages)) {
+      var s = readPrice(['today', 'only', 'price']);
+      push('view_item', s.value, s.currency);
+    }
+    if (onPage(FUNNEL.checkoutPages)) {
+      var c = readPrice(['total', 'today', 'price']);
+      push('begin_checkout', c.value, c.currency);
+      try {
+        sessionStorage.setItem('mdn_ghl_txn', 'TXN-' + new Date().getTime());
+        sessionStorage.setItem('mdn_ghl_item', JSON.stringify(item(c.value))); // the product from the order page
+      } catch (e) {}
+    }
+    if (onPage(FUNNEL.thankYouPages)) {
+      var tries = 0;
+      (function waitForTotal() {
+        var t = readPrice(['total']);
+        if (t.value > 0 || tries >= 8) {
+          if (t.value <= 0) return; // no price found: do not record a $0 sale
+          var txn = 'TXN-' + new Date().getTime();
+          try {
+            txn = sessionStorage.getItem('mdn_ghl_txn') || txn;
+            sessionStorage.setItem('mdn_ghl_txn', txn); // same ID if the page is reloaded
+          } catch (e) {}
+          try {
+            if (localStorage.getItem('mdn_ghl_sent_' + txn)) return; // reload: already counted
+            localStorage.setItem('mdn_ghl_sent_' + txn, '1');
+          } catch (e) {}
+          var main = null;
+          try { main = JSON.parse(sessionStorage.getItem('mdn_ghl_item') || 'null'); } catch (e) {}
+          if (main) main.price = t.value;
+          push('purchase', t.value, t.currency, { transaction_id: txn }, main ? [main] : null);
+          return;
+        }
+        tries++;
+        setTimeout(waitForTotal, 500);
+      })();
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+  else run();
+})();
+</script>
