@@ -1,0 +1,5 @@
+[
+  { "event": "view_item", "ecommerce": { "currency": "USD", "value": 27, "items": [{ "item_id": "sales", "item_name": "Ad Course", "price": 27, "quantity": 1 }] }, "page_path": "/sales" },
+  { "event": "begin_checkout", "ecommerce": { "currency": "USD", "value": 27, "items": [{ "item_id": "order", "item_name": "Ad Course Checkout", "price": 27, "quantity": 1 }] }, "page_path": "/order" },
+  { "event": "purchase", "ecommerce": { "currency": "USD", "value": 124, "transaction_id": "TXN-1794023504304", "items": [{ "item_id": "order", "item_name": "Ad Course Checkout", "price": 124, "quantity": 1 }] }, "page_path": "/thank-you" }
+]
